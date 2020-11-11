@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version}}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: "{{ .Release.Name }}-health-test"
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  restartPolicy: Never
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+  containers:
+  - name: {{ .Release.Name }}-health-test
+    {{- if .Values.test.image }}
+    image: {{ .Values.test.image }}
+    {{- else }}
+    image: docker.io/centos:latest
+    {{- end }}  
+    command: ["bash","-c",'status=$(curl -I -o /dev/null -s -w %{http_code} http://vault-consul.{{ .Release.Namespace }}.svc.cluster.local:8200/v1/sys/health);if [ "$status" == "200" ];then exit 0;else exit 1;fi']
+    securityContext:
+        allowPrivilegeEscalation: true
+        readOnlyRootFilesystem: false
+        runAsNonRoot: false
+        runAsUser: 0
+        privileged: false
+        capabilities:
+          drop:
+          - all
+          add:
+          - CHOWN
+          - DAC_OVERRIDE
+          - FOWNER
+          - FSETID
+          - KILL
+          - SETGID
+          - SETUID
+          - SETPCAP
+          - NET_BIND_SERVICE
+          - NET_RAW
+          - SYS_CHROOT
+          - MKNOD
+          - AUDIT_WRITE
+          - SETFCAP

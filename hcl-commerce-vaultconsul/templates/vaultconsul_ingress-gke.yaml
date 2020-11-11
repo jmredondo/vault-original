@@ -1,0 +1,20 @@
+{{- if and .Values.common.enableIngress (eq .Values.common.ingressController "gke")}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: vault-{{ .Values.common.tenant }}-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    kubernetes.io/ingress.class: gce
+  labels:
+    group: {{ .Release.Namespace }}
+spec:
+  rules:
+  - host: vault.{{ .Values.common.externalDomain }}
+    http:
+      paths:
+      - path: /*
+        backend:
+          serviceName: vault-consul
+          servicePort: 8200
+{{- end }}

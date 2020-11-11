@@ -1,0 +1,151 @@
+{{- $root := . -}}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vault-consul
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version}}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Chart.Name }}
+      chart: {{ .Chart.Name }}-{{ .Chart.Version}}
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+      component: vault-consul
+  template:
+    metadata:
+      labels:
+        app: {{ .Chart.Name }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version}}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
+        component: vault-consul
+    spec:
+      containers:
+        - name: consul
+          image: {{ .Values.vaultConsul.imageRepo }}consul:{{ .Values.vaultConsul.consulImageTag }}
+          imagePullPolicy: {{ .Values.vaultConsul.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              drop:
+              - all
+              add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - FOWNER
+              - FSETID
+              - KILL
+              - SETGID
+              - SETUID
+              - SETPCAP
+              - NET_BIND_SERVICE
+              - NET_RAW
+              - SYS_CHROOT
+              - MKNOD
+              - AUDIT_WRITE
+              - SETFCAP
+          ports:
+          - containerPort: 8500
+            name: port8500
+          livenessProbe:
+            tcpSocket:
+              port: 8500
+            initialDelaySeconds: 300
+            timeoutSeconds: 60
+          readinessProbe:
+            tcpSocket:
+              port: 8500
+        - name: vault
+          image: {{ .Values.vaultConsul.imageRepo }}vault:{{ .Values.vaultConsul.vaultImageTag }}
+          imagePullPolicy: {{ .Values.vaultConsul.imagePullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: true
+            readOnlyRootFilesystem: false
+            runAsNonRoot: false
+            runAsUser: 0
+            privileged: false
+            capabilities:
+              drop:
+              - all
+              add:
+              - CHOWN
+              - DAC_OVERRIDE
+              - FOWNER
+              - FSETID
+              - KILL
+              - SETGID
+              - SETUID
+              - SETPCAP
+              - NET_BIND_SERVICE
+              - NET_RAW
+              - SYS_CHROOT
+              - MKNOD
+              - AUDIT_WRITE
+              - SETFCAP
+          ports:
+          - containerPort: 8200
+            name: port8200
+          livenessProbe:
+            tcpSocket:
+              port: 8200
+            initialDelaySeconds: 600
+            timeoutSeconds: 300
+          readinessProbe:
+            httpGet:
+              path: /ui/
+              port: 8200
+          volumeMounts:
+          - name: config-volume
+            mountPath: /vault/config/config.json
+            subPath: config.json
+          command:
+            - "/bin/sh"
+            - "-ec"
+            - |
+              /bin/vault server -dev -dev-root-token-id={{ .Values.vaultConsul.vaultToken }} -config=/vault/config/config.json -dev-listen-address="0.0.0.0:8200"
+          {{- if .Values.vaultConsul.vaultLoadData }}
+          lifecycle:
+            postStart:
+              exec: 
+                command:
+                  - "/bin/sh"
+                  - "-ec"
+                  - |
+                    export VAULT_ADDR=http://127.0.0.1:8200
+                    export VAULT_TOKEN={{ .Values.vaultConsul.vaultToken }}
+                    TIMEOUT=$(( `date +%s` + 60 )); until vault status || [ `date +%s` -gt $TIMEOUT ]; do sleep 1; done
+                    vault secrets enable -path {{ .Values.common.tenant }} generic
+                    vault secrets enable -path=selfserve_production_pki -description="SelfServe Root CA" -max-lease-ttl=87600h pki
+                    vault write selfserve_production_pki/root/generate/internal common_name="selfserve_production_pki Root CA" ttl=87600h  key_bits=4096 exclude_cn_from_sans=true
+                    vault write  selfserve_production_pki/roles/generate-cert key_bits=2048  max_ttl=8760h allow_any_name=true
+                    {{- if .Values.vaultConsul.vaultData }}
+                    {{- range $environmentName, $environmentValues := .Values.vaultConsul.vaultData }}
+                    {{- range $key, $value := $environmentValues.auth }}
+                    vault kv put {{ $root.Values.common.tenant }}/{{ $environmentName }}/auth/{{ $key }} value="{{ $value }}"
+                    {{- end }}
+                    {{- range $key, $value := $environmentValues.live }}
+                    vault kv put {{ $root.Values.common.tenant }}/{{ $environmentName }}/live/{{ $key }} value="{{ $value }}"
+                    {{- end }}
+                    {{- range $key, $value := $environmentValues.both }}
+                    vault kv put {{ $root.Values.common.tenant }}/{{ $environmentName }}/{{ $key }} value="{{ $value }}"
+                    {{- end }}
+                    {{- end }}
+                    {{- end }}
+          {{- end }}
+      volumes:
+      - name: config-volume
+        configMap:
+          name: vault-config
+      serviceAccountName: {{ .Values.rbac.serviceAccountName }}

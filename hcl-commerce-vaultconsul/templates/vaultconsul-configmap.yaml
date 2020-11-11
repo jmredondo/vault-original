@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: {{ .Chart.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version}}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  name: vault-config
+  namespace: {{ .Release.Namespace }}
+data:
+  config.json: |
+    storage "consul" {
+             address = "127.0.0.1:8500"
+             path = "vault{{ randAlphaNum 5 }}"
+             tls_skip_verify = 1
+    }

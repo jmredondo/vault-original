@@ -1,0 +1,6 @@
+
+Chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+
+This vault-Consul deployment is for development only.
+
+Please check Vault-Consul helm release status in 1 min.
